@@ -1,4 +1,7 @@
+import {consumeRecoveryLink,createRecovery} from './recovery.mjs';
 import {createBackend} from './backend.mjs';import {validateTask,labels} from './policy.mjs';
+let recoveryLink=consumeRecoveryLink(window.location,window.history);
+let recovery=null,recoveryVersion=0,recoveryTimer=null;
 const $=s=>document.querySelector(s), notice=t=>$('#notice').textContent=t;
 let backend=null,epoch=0,taskKey=crypto.randomUUID();
 const el=(tag,text)=>{const e=document.createElement(tag);e.textContent=text;return e;};
@@ -9,5 +12,14 @@ $('#login-form').onsubmit=async e=>{e.preventDefault();const f=e.currentTarget,b
 $('#task-form').addEventListener('input',()=>taskKey=crypto.randomUUID());
 $('#task-form').onsubmit=async e=>{e.preventDefault();const f=e.currentTarget,b=f.querySelector('button'),version=epoch;b.disabled=true;try{const task=validateTask(f.elements.namedItem('title').value,f.elements.namedItem('details').value);await backend.submit(task,taskKey);if(version!==epoch)return;f.reset();taskKey=crypto.randomUUID();notice('任务已保存，尚未接单或执行。');await refresh();}catch(e){notice(e.message);}finally{b.disabled=false;}};
 $('#refresh').onclick=refresh;$('#logout').onclick=async()=>{clear();notice('已退出');try{await backend.logout();}catch{notice('本页会话已清除，远端退出未确认');}};
-window.addEventListener('pagehide',clear);
-try{backend=createBackend(await(await fetch('config.json',{cache:'no-store'})).json());if(backend){$('#login-button').disabled=false;notice('请输入已开通账号登录');}else notice('准备版：后端权限和账号尚未配置，登录暂未启用。');}catch{notice('无法加载配置，登录暂未启用。');}
+function stopRecovery(){recoveryVersion++;clearTimeout(recoveryTimer);recovery?.cancel();recovery=null;recoveryLink=null;$('#recovery-form').reset();$('#recovery').hidden=true;$('#login').hidden=false;}
+$('#recovery-cancel').onclick=()=>{stopRecovery();notice('已取消重设，请使用原密码登录或重新申请邮件');};
+$('#recovery-form').onsubmit=async e=>{e.preventDefault();const f=e.currentTarget,b=$('#recovery-button'),version=recoveryVersion;let password=f.elements.namedItem('new-password').value,confirmation=f.elements.namedItem('confirm-password').value;f.reset();b.disabled=true;try{if(!recovery)throw Error('重设链接无效或已过期');await recovery.submit(password,confirmation);if(version!==recoveryVersion)return;stopRecovery();notice('密码已更新，请使用新密码登录');}catch(e){if(version===recoveryVersion)notice(e.message);}finally{password='';confirmation='';if(version===recoveryVersion)b.disabled=false;}};
+window.addEventListener('pagehide',()=>{stopRecovery();backend?.clear();clear();});
+try{const config=await(await fetch('config.json',{cache:'no-store'})).json();backend=createBackend(config);if(backend){$('#login-button').disabled=false;
+ if(recoveryLink?.kind==='recovery'){
+  const version=recoveryVersion,expires=recoveryLink.expires;recovery=createRecovery(config,recoveryLink);recoveryLink=null;$('#login').hidden=true;$('#recovery').hidden=false;notice('正在验证重设链接…');
+  recoveryTimer=setTimeout(()=>{stopRecovery();notice('重设链接已过期，请重新申请邮件');},Math.max(0,expires-Date.now()));
+  try{await recovery.verify();if(version===recoveryVersion){$('#recovery-button').disabled=false;notice('链接已验证，请本人输入并确认新密码');}}catch(e){if(version===recoveryVersion){stopRecovery();notice(e.message);}}
+ }else{notice(recoveryLink?.kind==='invalid'?'重设链接无效，请重新申请邮件；也可以使用现有密码登录':'请输入已开通账号登录');recoveryLink=null;}
+}else{recoveryLink=null;notice('准备版：后端权限和账号尚未配置，登录暂未启用。');}}catch{stopRecovery();notice('无法加载配置，登录暂未启用。');}

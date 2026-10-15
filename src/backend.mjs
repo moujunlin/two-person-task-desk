@@ -11,6 +11,7 @@ export function createBackend(config) {
  }
  function clear(){token=null;user=null;expires=0;}
  return {
+  clear,
   async login(email,password){clear();const d=await request('/auth/v1/token?grant_type=password',{method:'POST',body:{email:email.trim(),password},auth:false}); token=d.access_token;user=d.user;expires=Date.now()+d.expires_in*1000;try{const m=await request('/rest/v1/desk_members?select=user_id&active=eq.true');if(!m?.some(x=>x.user_id===user.id))throw Error('该账号没有工作区权限');return user.id;}catch(e){clear();throw e;}},
   async logout(){try{if(token)await request('/auth/v1/logout',{method:'POST'});}finally{clear();}},
   async tasks(){return request('/rest/v1/desk_tasks?select=id,owner_id,title,details,state,result,evidence_url,created_at&order=created_at.desc&limit=100');},
