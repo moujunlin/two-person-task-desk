@@ -1,0 +1,4 @@
+import {renderTaskCard,renderComment} from '../src/task-card.mjs';
+const long='abcdef0123456789'.repeat(9);
+const fixtures=[{title:'检查演示项目进度',details:'请总结目前完成的内容。\n下一步先做什么？\n\n这是一条合成测试任务。',state:'done',result:'- 已整理当前进度，演示页面可以查看。\n- 下一步先确认布局，再安排后续制作。\n- 本次完成的是进度同步。\n\n【详细记录】\n版本标识：'+long+'\n\n详细说明：\n保留每一行原始文本。\nhttps://example.com/'+long+'\n<script>alert("合成注入文本")</script>',evidence_url:'https://example.com/demo'}, {title:'旧格式回复仍然完整显示',details:'用于验证没有详细记录分隔符的历史内容。',state:'working',result:'第一段原文。\n下一行原文。\n\n第二段保留空行。\n<img src=x onerror=alert(1)>\n'+long}, {title:'等待回复的任务',details:'简短的任务说明。',state:'submitted',result:null}];
+for(const fixture of fixtures){const {article,comments,show}=renderTaskCard({...fixture,created_at:'2026-01-01T12:00:00Z'});show.onclick=()=>{comments.replaceChildren(renderComment({body:'这里是成员讨论，与 dot 回复分开展示。\n\n长标识：'+long}));};document.querySelector('#preview').append(article);}
