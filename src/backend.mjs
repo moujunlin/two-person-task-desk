@@ -6,12 +6,12 @@ export function createBackend(config) {
   if(auth&&(!token||Date.now()>=expires)) {clear(); throw Error('会话已过期，请重新登录');}
   const r=await fetch(config.url+path,{method,headers:{apikey:config.publishableKey,'Content-Type':'application/json',...(auth?{Authorization:`Bearer ${token}`}:{})},body:body?JSON.stringify(body):undefined,cache:'no-store',credentials:'omit'});
   const data=await r.json().catch(()=>null);
-  if(!r.ok) {if(r.status===401)clear(); const e=Error(r.status===401?'请重新登录':'请求未成功，请稍后重试');e.status=r.status;e.code=data?.code;throw e;}
+  if(!r.ok) {if(r.status===401)clear(); const code=data?.code||data?.error_code; const messages={invalid_credentials:'邮箱或密码不正确，请核对工作区账号和创建时设置的密码',email_not_confirmed:'邮箱尚未确认，请联系工作区管理员',over_request_rate_limit:'尝试过于频繁，请稍后再试'}; const e=Error(messages[code]||(r.status===401?'请重新登录':`请求未成功（HTTP ${r.status}），请稍后重试`));e.status=r.status;e.code=code;throw e;}
   return data;
  }
  function clear(){token=null;user=null;expires=0;}
  return {
-  async login(email,password){clear();const d=await request('/auth/v1/token?grant_type=password',{method:'POST',body:{email,password},auth:false}); token=d.access_token;user=d.user;expires=Date.now()+d.expires_in*1000;try{const m=await request('/rest/v1/desk_members?select=user_id&active=eq.true');if(!m?.some(x=>x.user_id===user.id))throw Error('该账号没有工作区权限');return user.id;}catch(e){clear();throw e;}},
+  async login(email,password){clear();const d=await request('/auth/v1/token?grant_type=password',{method:'POST',body:{email:email.trim(),password},auth:false}); token=d.access_token;user=d.user;expires=Date.now()+d.expires_in*1000;try{const m=await request('/rest/v1/desk_members?select=user_id&active=eq.true');if(!m?.some(x=>x.user_id===user.id))throw Error('该账号没有工作区权限');return user.id;}catch(e){clear();throw e;}},
   async logout(){try{if(token)await request('/auth/v1/logout',{method:'POST'});}finally{clear();}},
   async tasks(){return request('/rest/v1/desk_tasks?select=id,owner_id,title,details,state,result,evidence_url,created_at&order=created_at.desc&limit=100');},
   async comments(taskId){return request(`/rest/v1/desk_comments?select=id,author_id,body,created_at&task_id=eq.${encodeURIComponent(taskId)}&order=created_at.asc&limit=100`);},
